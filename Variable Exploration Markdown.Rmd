@@ -1,0 +1,500 @@
+---
+title: "Exploring Variables Affecting Perception of Water Quality"
+author: "Carly Scott"
+subtitle: An analysis of social perception data from Loja, Ecuador
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+---
+```{r, echo = F}
+#Necessary packages
+##Packages used, if code does not work, double check this list is complete
+suppressMessages({
+library(sp)
+library(rgdal)
+library(raster)
+library(spdep)
+library(mctest)
+library(glmmLasso)
+options(warn= -1) #I've suppresed warnings for display purposes, I highly recommend you do not if editing the code
+options(Encoding="UTF-8")
+})
+```
+
+## Executive Summary & Brief Discussion
+
+Through a penalized logistic mixed model (via LASSO), and consequent analysis, the most important factors affecting water quality perception are: geography, amount of water usage, usage cases of water relating to food consumption and production, degree of services in a community, access to potable water, concern over waste water contamination, and residency in a community for more than 20 years. Above all, I think this data suggests a disconnect of the population of Loja with abstract ideas water quality management and use. While certain external factors (such as deforestation) may be significant contributors to river quality decline, community perception of water quality does not refelct this (or as seen here, is reflected in odd non-linear model behavior). Similarly, I believe this data suggests a certain amount of "ignorance is bliss". This begins to be evidenced by long-time residents having a lower probability of percieving above average water quality. However, an added layer is the quadratic behavior of water usage amount- often respondents with intermediate amounts of usage will have the highest water quality perception. 
+
+## Background
+The goal of this extended analysis is to build off of the work which was done in the summer of 2018. Between 2016 and 2017, roughly 400 surveys were distributed to the residents of Loja, Ecuador. The overall goal of these surveys was to determine social, environmental, and demographic factors which affect citizens' perception of their water quality. For this analysis, 55 fields for the survey were considered as potential predictors of water quality perception. 
+
+From the survey, a metric of water quality perception (PWQ) was constructed based on perceptions of overall stream quality, stream color, and stream color. The calculated Chronbach's alpha for this metric was 0.922, signaling a high degree of internal consistency. This metric was then converted from range [0,5] to a binary predictor of above/below average water quality. The average PWQ was 2.24. Thus, after binary conversion:
+
+$PWQ = 1$: corresponds to a perception of water quality greater than or equal to 2.24
+
+$PWQ = 0$: corresponds to a perception of water quality less than 2.24
+
+The distribution of this indicator is:
+
+```{r, echo = FALSE}
+setwd('C:/Users/Carly Scott/Documents/Ecuador Social Science/')
+EnglishWorkingFile <- read.csv("EnglishWorkingFile.csv", header = T, na.strings='999')
+EnglishWorkingFile$TotalStreamQual <- (EnglishWorkingFile$StreamColor + EnglishWorkingFile$StreamOdor + EnglishWorkingFile$StreamQuality)/3
+EnglishWorkingFile$UsageAmount <- EnglishWorkingFile$DrinkCook + EnglishWorkingFile$Irrigation + EnglishWorkingFile$CattleTroughs + EnglishWorkingFile$PersonalHygene + EnglishWorkingFile$WashClothes + EnglishWorkingFile$Recreation + EnglishWorkingFile$RiverSports + EnglishWorkingFile$PureAir + EnglishWorkingFile$NaturalRelaxxation
+
+water_qual_perc <- EnglishWorkingFile
+hilototalstream <- vector()
+for (i in 1:length(water_qual_perc$TotalStreamQual))
+{
+  if (water_qual_perc$TotalStreamQual[i] < 2.24)
+  {
+    hilototalstream[i] = 0
+  }
+  if (water_qual_perc$TotalStreamQual[i] >= 2.24)
+  {
+    hilototalstream[i] = 1
+  }
+}
+water_qual_perc$hilo <- hilototalstream
+barplot(table(as.factor(water_qual_perc$hilo)), xlab = "Binary PWQ Indicator", ylab = "Count", main = "Distribution of Above Average vs. Below Average PWQ", xaxt="n")
+
+```
+
+Prior to analysis, we also create a second indicator called 'Usage Amount'. This is simply a count of the number of categories a survey respondent reported using the river for. It is on range [0,9]. The distribution is:
+
+```{r, echo = F}
+barplot(table(as.factor(water_qual_perc$UsageAmount)), ylab = "Count", xlab = "Number of Uses", main = "Distribution of Usage Amounts")
+```
+
+## Methodology
+
+Due to the large number of variables from the survey (55), I decided an unsupervised machine learning technique would be a statistically rigourous techinuqe to reduce the number of variables. From this class of methods I chose LASSO regression. LASSO regression uses L1 penalization to shrink regression coefficients to zero. For this project, given the number of variables, I felt this was a better method than Ridge regression (which shrinks coefficients, but does not eliminate any). Essentially, the coefficients returned by LASSO regression are measures of the "importance" of different variables. 
+
+An added layer of complexity is the spatial autocorrelation present in the data. This autocorrelation was determined by calculating _Moran's I_. A quick synopsis of the steps taken to calculate this:
+
+1. Transform dataframe into spatial points dataframe
+2. Create a network of neighbors, with a neighborhood = 5 (Determined through experimentation)
+3. Overlay a fine raster grid ontop of the points to create polygons
+4. Complete Moran test
+```{r, echo = FALSE}
+suppressWarnings({
+coordinates(EnglishWorkingFile) <- ~UTMX + UTMY
+proj4string(EnglishWorkingFile) <- CRS("+init=epsg:32717")
+lonlats_EnglishFile <- spTransform(EnglishWorkingFile, CRS("+init=epsg:4326"))
+pnts.knn <- knearneigh(coordinates(lonlats_EnglishFile), k = 5)
+pnt.nb <- knn2nb(pnts.knn)
+pnt.w <- nb2listw(knn2nb(pnts.knn), style = "W")
+pnt.mat <- nb2mat(knn2nb(pnts.knn), style = "B")
+
+Long.Range <- c(-4.068951, -3.933070)
+Lat.Range <- c(-79.22997, -79.17489)
+
+LojaGrid <- expand.grid(x = seq(from = Lat.Range[1], to = Lat.Range[2], by = 0.0005),
+                            y = seq(from = Long.Range[1], to = Long.Range[2], by = 0.0005))
+coordinates(LojaGrid) <- ~x + y
+projection(LojaGrid) <- CRS("+init=epsg:4326")
+gridded(LojaGrid) <- TRUE
+fullgrid(LojaGrid) <- TRUE
+LojaGrid.r <- raster(LojaGrid)
+Data.r <- rasterize(lonlats_EnglishFile, LojaGrid.r, fun = mean) #ignore warnings, they're coming from NA values
+
+Data.poly <- rasterToPolygons(Data.r)
+centroids <- coordinates(Data.poly)
+ord.k5 <- knn2nb(knearneigh(centroids, k = 5))
+ord.w <- nb2listw(ord.k5, style = "W")
+
+Data.poly$lmstreamqual <- lag.listw(ord.w, Data.poly$TotalStreamQual)
+moran.test(Data.poly$lmstreamqual, ord.w, randomisation = T, alternative = "two.sided")})
+```
+Moran's I only ranges from [-1, 1], thus a statistinc of 0.83 represents a high degree of spatial autocorrelation. Furthermore, with p-value < 2.2e-16, this is also highly significant. This is to be expected. The quality of the river differs largely when traveling from north to south in Loja, due to differing use practices up/downstream. The model must be analyzed in the context of this geographic dependence.
+
+To combat this, I used a generalized linear mixed model (GLMM). This allowed the control of "community" as a random factor. In other words, reducing correlation between survey responses and the community they came from. However, this did not completely negate the spatial autocorrelation. Therefore, UTMY (or meters from north to south) was added as a variable to the model.
+
+Another issue was the categorical nature of the data. Even though many categories were initially assigned integers ( _i.e. rate your perception of water quality on a scale of 1-5, with 1 being very low and 5 being very high_). It is difficult to numerically assign a "distance" between concepts such as "low" and "medium". Therefore, many variables were converted to _ordered factors_. The use of ordered factors retains the information of the scale, but does not assume a linear distance between values on the scale. Instead, when using these factors in a regression, the analysis attempts to fit polynomials up to degree _k-1_ (where _k_ is the number of levels within the factor). From the regression output, you can then tell the approximate behavior of a given ordered factor ( _i.e. linear, quadratic, cubic; intuitively we typically expect our scales to be linear_).
+
+```{r, wrangle_data, echo = F}
+##Restructure data, ensuring columns are of correct type and we drop NA values
+#Drop columns which have character responses, we won't analyze these
+water_qual_perc$ï..ComCode <- NULL
+water_qual_perc$Name <- NULL
+water_qual_perc$Date <- NULL 
+water_qual_perc$ComName <- NULL
+water_qual_perc$Other <- NULL
+water_qual_perc$OtherProgram <- NULL
+water_qual_perc$OtherSpec <- NULL
+water_qual_perc$birdsamphibs <- NULL
+water_qual_perc$X <- NULL
+water_qual_perc$X.1 <- NULL
+water_qual_perc$X.2 <- NULL
+water_qual_perc$Initiatives.of.Interest <- NULL
+water_qual_perc$KindofChange <- NULL
+water_qual_perc$Climate <- NULL
+water_qual_perc$ChangeinClimate <- NULL
+water_qual_perc$Quality.of.Water <- NULL
+water_qual_perc$Profession <- NULL
+
+water_qual_perc$ComNumber <- as.factor(water_qual_perc$ComNumber)
+water_qual_perc$Gender <- as.factor(water_qual_perc$Gender)
+water_qual_perc$Education <- factor(water_qual_perc$Education, ordered = TRUE, levels = c(1, 2, 3, 4, 5))
+water_qual_perc$Residency <- as.factor(water_qual_perc$Residency)
+
+water_qual_perc$PotableWater <- factor(water_qual_perc$PotableWater)
+water_qual_perc$Piped.Water <- factor(water_qual_perc$Piped.Water)
+water_qual_perc$WaterQuebadra <- factor(water_qual_perc$WaterQuebadra)
+water_qual_perc$Sewer <- factor(water_qual_perc$Sewer)
+water_qual_perc$Telephone <- factor(water_qual_perc$Telephone)
+water_qual_perc$Internet <- factor(water_qual_perc$Internet)
+water_qual_perc$PavedStreets <- factor(water_qual_perc$PavedStreets)
+water_qual_perc$GarbageCollection <- factor(water_qual_perc$GarbageCollection)
+water_qual_perc$Internet <- factor(water_qual_perc$Internet)
+water_qual_perc$Electricity <- factor(water_qual_perc$Electricity)
+water_qual_perc$ServiceLevel <- factor(water_qual_perc$ServiceLevel, ordered = TRUE, levels=c(1, 2))
+water_qual_perc$Basic.Services <- factor(water_qual_perc$Basic.Services, ordered = TRUE, levels=c(3, 2, 1))
+water_qual_perc$ImpWaterQuality <- factor(water_qual_perc$ImpWaterQuality, ordered = TRUE, levels = c(1, 2, 3))
+water_qual_perc$ImpElectricity <- factor(water_qual_perc$ImpElectricity, ordered = TRUE, levels = c(1, 2, 3))
+water_qual_perc$ImpRoads <- factor(water_qual_perc$ImpRoads, ordered = TRUE, levels = c(1, 2, 3))
+water_qual_perc$ImpTrash <- factor(water_qual_perc$ImpTrash, ordered = TRUE, levels = c(1, 2, 3))
+water_qual_perc$ImpPublicSanitation <- factor(water_qual_perc$ImpPublicSanitation, ordered = TRUE, levels = c(1, 2, 3))
+water_qual_perc$ImpPublicTransport <- factor(water_qual_perc$ImpPublicTransport, ordered = TRUE, levels = c(1, 2, 3))
+water_qual_perc$ImpPublicSchool <- factor(water_qual_perc$ImpPublicSchool,ordered = TRUE, levels = c(1, 2, 3))
+water_qual_perc$ImpAirQuality <- factor(water_qual_perc$ImpAirQuality, ordered = TRUE, levels = c(1, 2, 3))
+water_qual_perc$ImpEnvironment <- factor(water_qual_perc$ImpEnvironment, ordered = TRUE, levels = c(1, 2, 3))
+water_qual_perc$ProAgriChem <- factor(water_qual_perc$ProAgriChem, ordered = TRUE, levels = c(0,3,2,1))
+water_qual_perc$ProTrash <- factor(water_qual_perc$ProTrash, ordered = TRUE, levels = c(0,3,2,1))
+water_qual_perc$ProWaterContam <- factor(water_qual_perc$ProWaterContam, ordered = TRUE, levels = c(0, 3, 2, 1))
+water_qual_perc$ProAirContan <- factor(water_qual_perc$ProAirContan, ordered = TRUE, levels = c(0, 3, 2, 1))
+water_qual_perc$Mosquitos <- factor(water_qual_perc$Mosquitos, ordered = TRUE, levels = c(0, 3, 2, 1))
+water_qual_perc$Traffic <- factor(water_qual_perc$Traffic, ordered = TRUE, levels = c(0, 3, 2, 1))
+water_qual_perc$Dust <- factor(water_qual_perc$Dust, ordered = TRUE, levels = c(0, 3, 2, 1))
+water_qual_perc$Noise <- factor(water_qual_perc$Noise, ordered = TRUE, levels = c(0, 3, 2, 1))
+water_qual_perc$Watewater <- factor(water_qual_perc$Watewater, ordered = TRUE, levels = c(0, 3, 2, 1))
+water_qual_perc$WaterQuality <- factor(water_qual_perc$WaterQuality, ordered = TRUE, levels = c(1, 2, 3, 4, 5))
+water_qual_perc$DrinkCook <- factor(water_qual_perc$DrinkCook)
+water_qual_perc$Irrigation <- factor(water_qual_perc$Irrigation)
+water_qual_perc$CattleTroughs <- factor(water_qual_perc$CattleTroughs)
+water_qual_perc$PersonalHygene <- factor(water_qual_perc$PersonalHygene)
+water_qual_perc$WashClothes <- factor(water_qual_perc$WashClothes)
+water_qual_perc$Recreation <- factor(water_qual_perc$Recreation)
+water_qual_perc$RiverSports <- factor(water_qual_perc$RiverSports)
+water_qual_perc$PureAir <- factor(water_qual_perc$PureAir)
+water_qual_perc$NaturalRelaxxation <- factor(water_qual_perc$NaturalRelaxxation)
+water_qual_perc$Ninguno <- factor(water_qual_perc$Ninguno)
+water_qual_perc$WaterServices <- factor(water_qual_perc$WaterServices, ordered = TRUE, levels = c(0, 3, 2, 1))
+water_qual_perc$AgriculturalUse <- factor(water_qual_perc$AgriculturalUse, ordered = TRUE, levels = c(0, 3, 2, 1))
+water_qual_perc$LiveStock <- factor(water_qual_perc$LiveStock, ordered = TRUE, levels = c(0, 3, 2, 1))
+water_qual_perc$Debris <- factor(water_qual_perc$Debris, ordered = TRUE, levels = c(0, 3, 2, 1))
+water_qual_perc$Mining <- factor(water_qual_perc$Mining, ordered = TRUE, levels = c(0, 3, 2, 1))
+water_qual_perc$Deforestation <- factor(water_qual_perc$Deforestation, ordered = TRUE, levels = c(0, 3, 2, 1))
+water_qual_perc$ApplyLaws <- factor(water_qual_perc$ApplyLaws, ordered= TRUE, levels = c(0, 3, 2, 1))
+water_qual_perc$Fines <- factor(water_qual_perc$Fines, ordered= TRUE, levels = c(0, 3, 2, 1))
+water_qual_perc$Incentives <- factor(water_qual_perc$Incentives, ordered= TRUE, levels = c(0, 3, 2, 1))
+water_qual_perc$EducationPrograms <- factor(water_qual_perc$EducationPrograms, ordered= TRUE, levels = c(0, 3, 2, 1))
+water_qual_perc$Age <- factor(water_qual_perc$Age, ordered = TRUE, levels = c(1, 2, 3, 4))
+water_qual_perc$UsageAmount <- factor(water_qual_perc$UsageAmount, ordered = TRUE, levels = c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9))
+
+water_qual_perc <- na.omit(water_qual_perc) #Crucial for dealing with factors 
+```
+
+
+### The Regression
+
+The initial model used was of the form:
+
+$PWQ$ ~ $ComType+ PotableWater + Piped.Water + WaterQuebadra + Sewer + Telephone + Internet + PavedStreets + GarbageCollection + \\ Internet + PavedStreets + GarbageCollection + Electricity + Basic.Services + ServiceLevel + ImpWaterQuality + ImpElectricity +\\ ImpRoads + ImpTrash + ImpPublicSanitation + ImpPublicTransport + ImpPublicSchool + ImpEnvironment + ProAgriChem + ProTrash +\\ ProWaterContam + ProAirContan + Mosquitos + Traffic + Dust + Noise + Watewater + WaterQuality + DrinkCook + Irrigation +\\ CattleTroughs +  Recreation + RiverSports + PureAir + NaturalRelaxxation + Ninguno + WaterServices + AgriculturalUse + LiveStock +\\ Debris + Mining + Deforestation + ApplyLaws + Fines + Incentives + EducationPrograms + Gender + Age + Education + Residency +\\ UsageAmount + UTMY + Community(random effect)$
+
+```{r, echo = F}
+suppressWarnings({nonconflcit_glmm <- glmmLasso(hilo~ComType+ PotableWater + Piped.Water + WaterQuebadra + Sewer + Telephone + Internet +
+                                PavedStreets +  + GarbageCollection + Electricity +
+                                Basic.Services + ServiceLevel + ImpWaterQuality + ImpElectricity + ImpRoads + ImpTrash +
+                                ImpPublicSanitation + ImpPublicTransport + ImpPublicSchool + ImpEnvironment + ProAgriChem +
+                                ProTrash + ProWaterContam + ProAirContan + Mosquitos + Traffic + Dust + Noise + Watewater +
+                                WaterQuality + DrinkCook + Irrigation + CattleTroughs +  Recreation + RiverSports + PureAir +
+                                NaturalRelaxxation + Ninguno + WaterServices + AgriculturalUse + LiveStock + Debris + Mining +
+                                Deforestation + ApplyLaws + Fines + Incentives + EducationPrograms + Gender + Age + Education +
+                                Residency + UsageAmount + UTMY, rnd = list(ComNumber=~1), lambda=40, data=water_qual_perc,
+                              family=binomial(link="logit"))})
+
+#For more details feel free to call 'summary(nonconflict_glmm)' in another cell, for our purposes, we will only look at nonzero coefficients
+```
+The model without services:
+```{r}
+suppressWarnings({nonconflcit_glmm <- glmmLasso(hilo~ComType+ ImpWaterQuality + ImpElectricity + ImpRoads + ImpTrash +
+                                ImpPublicSanitation + ImpPublicTransport + ImpPublicSchool + ImpEnvironment + ProAgriChem +
+                                ProTrash + ProWaterContam + ProAirContan + Mosquitos + Traffic + Dust + Noise + Watewater +
+                                WaterQuality + DrinkCook + Irrigation + CattleTroughs +  Recreation + RiverSports + PureAir +
+                                NaturalRelaxxation + Ninguno + WaterServices + AgriculturalUse + LiveStock + Debris + Mining +
+                                Deforestation + ApplyLaws + Fines + Incentives + EducationPrograms + Gender + Age + Education +
+                                Residency + UsageAmount + UTMY, rnd = list(ComNumber=~1), lambda=50, data=water_qual_perc,
+                              family=binomial(link="logit"))})
+```
+
+Optimize lambda:
+```{r}
+lambdas <- seq(0, 200, 5)
+lambda_opt <- matrix(data = NA, nrow = 40, ncol = 2)
+for (i in lambdas){
+  nonconflcit_glmm <- glmmLasso(hilo~ComType+ ImpWaterQuality + ImpElectricity + ImpRoads + ImpTrash +
+                                ImpPublicSanitation + ImpPublicTransport + ImpPublicSchool + ImpEnvironment + ProAgriChem +
+                                ProTrash + ProWaterContam + ProAirContan + Mosquitos + Traffic + Dust + Noise + Watewater +
+                                WaterQuality + DrinkCook + Irrigation + CattleTroughs +  Recreation + RiverSports + PureAir +
+                                NaturalRelaxxation + Ninguno + WaterServices + AgriculturalUse + LiveStock + Debris + Mining +
+                                Deforestation + ApplyLaws + Fines + Incentives + EducationPrograms + Gender + Age + Education +
+                                Residency + UsageAmount + UTMY, rnd = list(ComNumber=~1), lambda=i, data=water_qual_perc,
+                              family=binomial(link="logit"))
+  lambda_opt[i/5,1] <- i
+  lambda_opt[i/5,2] <- nonconflcit_glmm$aic
+  
+}
+```
+
+The coefficients returned by this model are:
+
+_(I highly recommend exporting these to a .csv for easier analysis)_
+
+```{r, display_coeffs, echo = F}
+coeffs <- as.data.frame(as.matrix(nonconflcit_glmm$coefficients))
+coeffs$ABS_VAL <- abs(coeffs$V1)
+sorted_coeffs <- coeffs[order(-coeffs$ABS_VAL),] #55 variables from survey
+colnames(sorted_coeffs) <- c("LASSO LogOdds Coeff", "|LASSO Coeff|")
+sorted_coeffs #Personally I like sorting by the absolute value of coefficients to see relative importance
+```
+
+Note that the first column is the actual coefficient returned by LASSO, and the second is the absolute value of the first column. I sort by the absolute value in order to tell relative importance regardless of direction of effect. Also note that variables ending in ".L", ".Q", ".C", etc. are polynomial relationships resulting from ordered factors included in the model.
+
+```{r, write_csv, echo = F}
+#Quick code to write coeffs to a .csv, uncomment to write
+write.csv(sorted_coeffs, "Sorted_Factor_Coefficients_woServices.csv")
+
+```
+
+
+## Results and Interpretation
+
+#### Usage of Water
+__Usage Amount__
+
+Usage amount is returned as the most important predictor in determing above or below average PWQ. It is interesting due to it's quadratic behavior (both UsageAmount.L and UsageAmount.Q are returned as important variables by LASSO). _Note that this quadratic behavior acts on the log odds, as we transform the coefficient to a probability this relationship will not be strictly preserved_
+
+At highest level, the relationship between UsageAmount (x) and log odds of having above average PWQ (y) is represented by:
+
+$y = 1.471x -.324x^2$
+
+We can convert this to a more interpretable measure; the effect of increasing usage amount on a survey respondents probability of percieving above average water quality:
+
+$Odds Ratio = exp(1.471x -.324x^2)$
+
+Plotting this:
+
+```{r, echo = F}
+suppressWarnings({
+curve(exp(1.471*x -.324*x^2),  0, 9, xaxt="n", ylab = 'Odds Ratio of percieving above average PWQ', xlab = 'Number of river uses', main = "Behavior of Water Usage Amount")
+abline(h = 1, col = 'red', lty= 'dashed')
+text(x = 7, y = 2, labels= 'More likely to percieve \n above average PWQ', col = 'green4')
+text(x = 2, y = 0.5, labels = 'Less likely to percieve \n above average PWQ', col = 'red4')
+xtick<-seq(0, 9, by=1)
+axis(side=1, at=xtick, labels = FALSE)
+text(x=xtick,  par("usr")[3], 
+     labels = xtick, pos = 1, xpd = TRUE, offset = 0.7)})
+```
+The zero tail of the plot starting at roughly x=7 may be due to small sample sizes at high levels of use (refer to distribution plot). However, it is interesting that the highest probability of above average PQW occurs at intermediate water usage. With 2-3 water uses, a survey respondent is roughly five times more likely to percieve above average water quality than not. As we explore the other variables, this result becomes more clear, as not all water use cases behave the same.
+
+__Significant Use Classes__
+```{r, echo = FALSE}
+bar.table <- as.data.frame((cbind(c('Use of water to drink and cook', 'Use of river areas for fresh air', 'Use of water for irrigation', 'Use of water to fill livestock troughs', 'Use of water for river sports'), c(exp(.807), exp(.677), exp(.227), exp(.190), exp(.043)))))
+colnames(bar.table) <- c('Use Case', 'Odds Ratio')
+
+bar.table
+```
+
+
+
+_Use of water to drink and cook_
+
+With a log odds coefficient of 0.807,  and an odds ratio of 2.24, the use of water to drink and cook increases the probability of above average PWQ by 124%, compared to non-use.
+
+_Use of river areas for fresh air_
+
+With a log odds coefficient of .677, and an odds ratio of 1.97, the use of river areas for fresh air increases the probability of above average PWQ by 97%, compared to non-use.
+
+_Use of water for irrigation_
+
+With a log odds coefficeint of .227, and an odds ratio of 1.25, the use of water for irrigation increases the probability of above average PWQ by 25%, compared to non-use.
+
+_Use of water to fill livestock troughs_
+
+With a log odds coefficient of .190, and an odds ratio of 1.21 the use of water to fill livestock (cattle?) troughs increases the probability of above average PWQ by 21%, compared to non-use.
+
+_Use of water for river sports_
+With a log odds coefficeint of 0.043, and an odds ratio of 1.04, the use of water for river sports increases the probability of above avearge PWQ by 4%. This is one of the least important effects in the model.
+
+__Overall Interpretation of Use Cases__
+
+The biggest take away is that not all use cases result in the same perception of water quality. Combined with the quadratic nature of usage amount overall, it is interesting the only five (out of nine) significnat use cases all positively affect water perception. Even more interstingly, three of these cases (drinking and cooking, irrigation, and livestock troughs) all relate to food-adjacent activities. Perhaps an above average percption of water quality is needed to "feel comfortable" using the water in a manner which will be consumed. 
+
+Furthermore, since probability of above average perception decreases after ~3 use cases, it is reasonable to think that too much interaction with water actually decreases perception. 
+
+#### Access to Services
+
+__Degree of Services__
+
+The behavior of the degree of services is quadratic, as service level moves from 'most rudimentary' (i.e., running water) to 'most advanced' (i.e. internet).
+
+This is represented by the formula:
+
+$(Log Odds of Above Average PWQ) = 0.232x + 0.104x^2$
+
+Plotting this as a function of probability of above average PWQ:
+
+```{r, echo=FALSE}
+curve(exp(0.232*x + 0.104*x^2), 1, 3, xaxt="n", ylim = c(0,6), ylab = 'Odds raio of percieving above average water quality', xlab = 'Degree of services', main = "Behavior of Service Degree")
+abline(h = 1, col ='red', lty ='dashed')
+xtick<-seq(1, 3, by=1)
+axis(side=1, at=xtick, labels = FALSE)
+text(x=xtick,  par("usr")[3], 
+     labels = c( "Most \nAdvanced","Moderate", "Most \nRudimentary"), pos = 1, xpd = TRUE, offset = 0.7)
+```
+
+Similar to the number of uses, we can then break this analysis down into the presence of specific services available to community residents.
+
+__Service Types__
+
+_Potable Water_
+
+Unsurprisingly, access to potable water is one of the strongest predictors of above average PWQ. With a log odds coefficient of .276, and odds ratio of 1.32, this corresponds to an increase in probability of above average PWQ by 32%, compared to no access.
+
+_Paved Streets_
+
+The presence of paved streets has a log odds coefficient of 0.077. This corresponds to an increase in probability of above average PWQ by 8%. However, to me there isn't a strong intuition why this should be the case; perhaps this is a vector for a different, unmeasured trend.
+
+_Piped Water_
+
+The presence of piped water has a log odds coefficient of -.0637. This corresponds to a __decrease__ in probability of above average PWQ by 6.2%.
+
+_Garbage Collection_
+
+Access to garbace collection has a log odds coefficeint of 0.0241. This corresponds to an increase in probability of above average PWQ by 2.5%. This makes a lot of intuitive sense, especially when traveling to field sites and qualitatively assessing litter on river banks.
+
+_Internet_
+
+Oddly, access to internet connection has a positive log odds coefficient of 0.020, meaning having internet access increases a survey respondent's probability of above average PWQ by 2%.
+
+__Overall Interpretation of Services__
+
+By far, the most critical service in relation to water quality perception is access to potable water. This makes a lot of intuitive sense; if a respondent has potable water they are 32% more likely to percieve above average water quality. Beyond this, it seems the _degree_ of service is more important in influencing perception than the actual services themselves. It is odd that respondents with the highest degree of service have the lowest likelihood of percieving high water quality. Perhaps this is an artifact of data structure?
+
+
+
+#### Perceptions of Contamination Sources
+
+Part of the survey asked respondents to rank what they believed to be primary sources of water contamination. Since these variables have an inherent ordering, from "no concern" to "most concern", they are not binary factors.
+
+_Deforestation_
+
+Deforestation behaves quadratically:
+
+```{r, echo = FALSE}
+curve(exp(0.667607*x - 0.40187*x^2), 1, 3, xaxt="n", ylim = c(0,6), ylab = 'Odds raio of percieving above average water quality', xlab = 'Degree of contamination concern from deforestation', main = "Behavior of Deforestation Contamination Belief")
+abline(h = 1, col ='red', lty ='dashed')
+xtick<-seq(1, 3, by=1)
+axis(side=1, at=xtick, labels = FALSE)
+text(x=xtick,  par("usr")[3], 
+     labels = c( "Most Concern","Moderate", "Least Concern"), pos = 1, xpd = TRUE, offset = 0.7)
+```
+
+An important note is that respondents who listed '0' or 'not a pressing concern' to the deforestation option had an odds ratio of roughly 1 of above average PWQ (corresponding to no effect). However, respondents who answered anything besides 'deforestation is the biggest concern for water quality' were more likely to have below average PWQ.
+
+_Wastewater_
+
+Wastewater concern behaves cubically:
+```{r, echo = FALSE}
+curve(exp(0.2419*x - 0.0619*x^2 + 0.057729*x^3), 1, 3, xaxt="n", ylim = c(0,6), ylab = 'Odds raio of percieving above average water quality', xlab = 'Degree of contamination concern from waste water', main = "Behavior of Waste Water Contamination Belief")
+abline(h = 1, col ='red', lty ='dashed')
+xtick<-seq(1, 3, by=1)
+axis(side=1, at=xtick, labels = FALSE)
+text(x=xtick,  par("usr")[3], 
+     labels = c( "Most Concern","Moderate", "Least Concern"), pos = 1, xpd = TRUE, offset = 0.7)
+```
+
+An important note is that respondents who listed '0' or 'not a pressing concern' to the wastewater option had an odds ratio of roughly 1 of above average PWQ (corresponding to no effect). More so than deforestation, the waste water behavior makes a lot of intuitve sense. As concern over wastewater decreases, the perception odds of above average PWQ __greatly__ increases (nearly 6-fold!).
+
+_Agricultural Chemicals_
+
+Concern over contamination from agricultural chemicals behaves quadratically:
+
+```{r, echo = FALSE}
+curve(exp(0.028138*x - 0.027258*x^2), 1, 3, xaxt="n", ylim = c(0,6), ylab = 'Odds raio of percieving above average water quality', xlab = 'Degree of contamination concern from agricultural chemicals', main = "Behavior of AgriChem Contamination Belief")
+abline(h = 1, col ='red', lty ='dashed')
+xtick<-seq(1, 3, by=1)
+axis(side=1, at=xtick, labels = FALSE)
+text(x=xtick,  par("usr")[3], 
+     labels = c( "Most Concern","Moderate", "Least Concern"), pos = 1, xpd = TRUE, offset = 0.7)
+```
+
+Since quadratic and linear coefficients are small, the degree of this belief does not greatly change over the potential responses. 
+
+__Overall Interpretation of Concerns__
+
+It seems the most reliable and intuitive contamination concern is __waste water__. As respondents become more concerned about this pollution source their odds of percieving high water quality exponentially decline. The nearly flat behavior of agricultural chemical contamination suggests it is not a critical factor in the model, even if it is significant. Finally, the odd behavior of the deforestation concern plot may warrant additional studies into this dynamic.
+
+
+#### Water Quality Variables
+
+Two of the variables found significant by the model relate to the degree/concern about water quality itself. These are independent of our overall measure of perception. While found significant by the model, they nominally affect odds of percieving high stream quality, and ultimately lend little additional information. Plots are still given here for reference. 
+
+_Water quality in the home_
+
+Respondents were asked to rank the water quality in their homes on a scale of 1-5. This factor behaved linearly:
+
+```{r, echo = FALSE}
+curve(exp(0.009411*x), 1, 5, xaxt="n", ylim = c(0,6), ylab = 'Odds raio of percieving above average water quality', xlab = 'Perception of Home Water Quality', main = "Behavior of Home Water Quality")
+abline(h = 1, col ='red', lty ='dashed')
+xtick<-seq(1, 5, by=1)
+axis(side=1, at=xtick, labels = FALSE)
+text(x=xtick,  par("usr")[3], 
+     labels = xtick, pos = 1, xpd = TRUE, offset = 0.7)
+```
+
+
+_Desire to improve water quality_
+
+This factor also behaved linearly:
+
+```{r, echo = F}
+curve(exp(-.00294*x ), 1, 3, xaxt="n", ylim = c(0,6), ylab = 'Odds raio of percieving above average water quality', xlab = 'Degree of desire to improve water quality', main = "Behavior of Desire to Improve Water Quality")
+abline(h = 1, col ='red', lty ='dashed')
+xtick<-seq(1, 3, by=1)
+axis(side=1, at=xtick, labels = FALSE)
+text(x=xtick,  par("usr")[3], 
+     labels = c( "Least Desire","Moderate", "Most Desire"), pos = 1, xpd = TRUE, offset = 0.7)
+```
+
+#### Community Type
+
+Community type significantly affected likelihood of above average PWQ. Respondents in a pasture-type community were 3.4% less likely to have above average PWQ than respondents in a forest/rural area. Respondents in an urban-type community were 12% less likely to have above average PWQ than respondents in a forest/rural area.
+
+Given the urban gradient of Loja, this quantifies the observed water quality differences between areas. However, it suggets that when transitioning from community types, differentials in perception of water quality are not constant.
+
+#### Other
+
+_Residency_
+
+Respondents who reported living in a community for more than 20 years were 37% less likely to have above average PWQ than respondents who had just moved to a community. This suggests that over time, users become increasingly dissatisfied with their water quality.
+
+_Geography_
+
+Even after controlling for community, there was still some geographic dependence in the data. This is on the order of log odds -4.965e-5 per meter. This corresponds to respondents in the northern part of the city being _half_ as likely to report above average PWQ than respondents in the south part of the city.
+
+```{r, echo = F}
+utms <- seq(9550028, 9565061, 1)
+odds <- vector()
+for (i in 1:length(utms)){
+  odds[i] <- exp(i*-4.97E-05)
+
+}
+plot(utms, odds, ylim = c(0,2), type = 'l')
+abline(h = 1, col = 'red', lty = 'dashed')
+
+```
+
+
