@@ -33,6 +33,8 @@ barplot(table(as.factor(water_qual_perc$hilo)), xlab = "Binary PWQ Indicator", y
 
 services <- c("PotableWater", "Piped.Water", "WaterQuebadra", "Sewer", "Telephone", "Internet", "PavedStreets", 'GarbageCollection', 'Electricity')
 
+#===============================================================================================
+#Explore Service Frequency
 par(mfrow=c(3,3))
 for (service in services){
   barplot(table(water_qual_perc[[service]]), xaxt = "n", main = service)
@@ -42,9 +44,12 @@ for (service in services){
        labels = c("Not Present", "Present"), pos = 1, xpd = TRUE, offset = 0.7)
 }
 
+
 #Potentially Interesting Services: PotableWater, Piped Water, Sewer, Telephone, Internet, Pavedstreets
 ##Almost always present: Garbage Collection and Electricity
 ##Mostly absent: WaterQuebadra 
+#==============================================================================================
+
 
 colnames(water_qual_perc)[1] <- 'ComCode'
 water_qual_perc$ComCode <- NULL
@@ -64,6 +69,7 @@ water_qual_perc$Climate <- NULL
 water_qual_perc$ChangeinClimate <- NULL
 water_qual_perc$Quality.of.Water <- NULL
 water_qual_perc$Profession <- NULL
+water_qual_perc$Ninguno <- NULL
 
 water_qual_perc$ComNumber <- as.factor(water_qual_perc$ComNumber)
 water_qual_perc$Gender <- as.factor(water_qual_perc$Gender)
@@ -127,11 +133,16 @@ water_qual_perc$ServiceAmount <- factor(water_qual_perc$ServiceAmount, ordered =
 
 water_qual_perc <- na.omit(water_qual_perc) #Crucial for dealing with factors 
 
+
+#======================================
+#Model Omitting covariate factors
 nonconflcit_glmm <- glmmLasso(hilo~ComType+ ServiceAmount + ImpWaterQuality + ImpElectricity + ImpRoads + ImpTrash +
-                                                  ImpPublicSanitation + ImpPublicTransport + ImpPublicSchool + ImpEnvironment + ProAgriChem +
+                                                  ImpPublicSanitation + ImpPublicTransport + ImpPublicSchool + ImpAirQuality +
+                                                  ProAgriChem +
                                                   ProTrash + ProWaterContam + ProAirContan + Mosquitos + Traffic + Dust + Noise + Watewater +
-                                                  WaterQuality + DrinkCook + Irrigation + CattleTroughs +  Recreation + RiverSports + PureAir +
-                                                  NaturalRelaxxation + Ninguno + WaterServices + AgriculturalUse + LiveStock + Debris + Mining +
+                                                  WaterQuality + DrinkCook + Irrigation + CattleTroughs + WashClothes +
+                                                  Recreation + RiverSports + PureAir +
+                                                  NaturalRelaxxation  + WaterServices + AgriculturalUse + LiveStock + Debris + Mining +
                                                   Deforestation + ApplyLaws + Fines + Incentives + EducationPrograms + Gender + Age + Education +
                                                   Residency + UsageAmount + UTMY, rnd = list(ComNumber=~1), lambda=50, data=water_qual_perc,
                                                 family=binomial(link="logit"))
@@ -145,36 +156,89 @@ sorted_coeffs
 write.csv(sorted_coeffs, "SansServicesModel.csv")
 
 
-#============================================================
+#==============Spearman's Rho==============================================
 #Use Spearman's Rho to check for correlation
 
-rho_mat <- matrix(NA, nrow = 65, ncol = 65)
-for (i in 1:(length(water_qual_perc)-1)){
-  for (j in 1:(length(water_qual_perc) - 1)){
-    foo <- spearman.test(water_qual_perc[,i], water_qual_perc[,i+1])
+rho_mat <- matrix(NA, nrow = 66, ncol = 66)
+for (i in 1:length(water_qual_perc)){
+  for (j in 1:length(water_qual_perc)){
+    foo <- spearman.test(water_qual_perc[,i], water_qual_perc[,j])
     if (foo$p.value <= 0.05)
     {
-    rho_mat[i, i+1] <- foo
+    rho_mat[i, j] <- foo$estimate
   }
   }
-
 }
 
+rho_df <- as.data.frame(rho_mat)
+colnames(rho_df) <- colnames(water_qual_perc)
+rownames(rho_df) <- colnames(water_qual_perc)
 
+#write it out to a csv, for easy conditional formatting. Attatch final matrix in appendix of report
+write.csv(rho_df, 'SansServiceCorrCheck.csv')
+#===============ProbCalc==================================================
+#Function to convert binary log odds to probability change
+prob_calc <- function(x, startprob){
+  logstart <- log(startprob/(1-startprob))
+  p <- exp(x + logstart)/(1+exp(x + logstart))
+  return(p)
+}
 
+poly_prob_calc <- {}
+#==============================================================
 
-##Incentives as an effective method of solving environmental problems
-
-
-curve(exp(-.9844*x^2),  0, 3, xaxt="n", ylab = 'Odds Ratio of percieving above average PWQ', xlab = 'Using Incentives to Solve Environmental Problems', main = "Behavior of Incentives")
-abline(h = 1, col = 'red', lty= 'dashed')
-text(x = 7, y = 2, labels= 'More likely to percieve \n above average PWQ', col = 'green4')
-text(x = 2, y = 0.5, labels = 'Less likely to percieve \n above average PWQ', col = 'red4')
-xtick<-seq(0, 3, by=1)
+#Usage Amount Curve
+curve(exp(1.8902*x - 1.04)/(1 + exp(1.8902*x - 1.04)),  0, 9, ylim = c(0,1.01), lwd = 1.8, xaxt="n", ylab = 'Probablity of percieving above average PWQ', xlab = 'Usage Amount of Stream', main = "Behavior of Usage Amount")
+points(xs, usage_vec, col = 'green4', pch = 19)
+lines(xs, usage_vec, col = 'green4', lty = 'longdash', lwd = 1.8)
+curve(exp(1.8902*x)/(1+exp(1.8902*x)), add = T, 0, 9, col = 'blue3', lwd = 1.8)
+#abline(h = 0.5, col = 'red', lty= 'dotted')
+text(x = 7, y = 0.2, labels= 'Adjusted Model Fitted Probability', col = 'black')
+text(x = 7, y = 0.1, labels = 'Proportion Respoding High PWQ', col = 'green4')
+text(x = 7, y = 0.15, labels = 'Unadjusted Model Fitted Probability', col = 'blue3')
+#text(x = 2, y = 0.5, labels = 'Less likely to percieve \n above average PWQ', col = 'red4')
+xtick<-seq(0, 9, by=1)
 axis(side=1, at=xtick, labels = FALSE) #Relabel xticks
 text(x=xtick,  par("usr")[3], 
      labels = xtick, pos = 1, xpd = TRUE, offset = 0.7)
 
+#===============Test for usage amount==================================================
+#Explore this extreme exponential connection more
+#par(mfrow = c(3,3))
+usage_vec <- vector(length = 10)
+xs <- seq(0,9,1)
+for (i in xs){
+  usage_vec[i + 1]<- mean(water_qual_perc[water_qual_perc$UsageAmount == i,]$hilo)
+}
+plot(xs, usage_vec, main = 'Proportions of High PWQ from Survey')
+
+#=================================================================
+##Usage of River for Pure Air
+binary_prob_plot('PureAir', 0.6457)
+
+##Usage of River for River Sports
+binary_prob_plot('RiverSports', -.63)
+
+#Usage of River to Wash Clothes
+binary_prob_plot('WashClothes', .6260)
+
+#usage o
+#=====================Function for binaryprobplots==========================================
+#Create a function to plot binary probability changes
+binary_prob_plot <- function(your_var, model_logodds){
+  starting_prob <- summary(water_qual_perc[[your_var]])[2]/length(water_qual_perc[[your_var]])
+  model_prob <- prob_calc(model_logodds, starting_prob)
+  ys <- c(starting_prob, model_prob) ##how to interpret probabilities? 
+  var_step <- stepfun(1, ys, 0)
+  plot(var_step, verticals=FALSE, xaxt = 'n', xlim = c(0, 2), ylim = c(0,1), lwd = 2, 
+       xlab = 'Binary Presence Indicator', ylab = "Prob. of above average PWQ", main = your_var)
+  abline(h=0.5, lty='dotted', col = 'red')
+  xtick <- c(0.5, 1.5)
+  axis(side = 1, at= xtick, labels = FALSE)
+  text(x=xtick, par("usr")[3], labels = c('Absent', 'Present'), pos = 1, xpd = T, offset = 0.7)
+  return(ys)
+}
+#========================================
 
 ##Deforestation as major environmental concern
 curve(exp(0.62*x -.254*x^2),  0, 3, ylim = c(0,2),xaxt="n", ylab = 'Odds Ratio of percieving above average PWQ', xlab = 'Concern over deforestation', main = "Behavior of Deforestation")
@@ -227,3 +291,6 @@ xtick<-seq(0, 9, by=1)
 axis(side=1, at=xtick, labels = FALSE)
 text(x=xtick,  par("usr")[3], 
      labels = xtick, pos = 1, xpd = TRUE, offset = 0.7)
+
+
+#======test
