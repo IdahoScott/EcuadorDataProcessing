@@ -3,6 +3,7 @@ library(rgdal)
 library(raster)
 library(spdep)
 library(mctest)
+library(glmmLasso)
 
 setwd('C:/Users/Carly Scott/Documents/Ecuador Social Science/')
 EnglishWorkingFile <- read.csv("EnglishWorkingFile.csv", header = T, na.strings='999')
@@ -142,6 +143,24 @@ sorted_coeffs
 
 
 write.csv(sorted_coeffs, "SansServicesModel.csv")
+
+
+#============================================================
+#Use Spearman's Rho to check for correlation
+
+rho_mat <- matrix(NA, nrow = 65, ncol = 65)
+for (i in 1:(length(water_qual_perc)-1)){
+  for (j in 1:(length(water_qual_perc) - 1)){
+    foo <- spearman.test(water_qual_perc[,i], water_qual_perc[,i+1])
+    if (foo$p.value <= 0.05)
+    {
+    rho_mat[i, i+1] <- foo
+  }
+  }
+
+}
+
+
 
 
 ##Incentives as an effective method of solving environmental problems
