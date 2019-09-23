@@ -116,7 +116,6 @@ water_qual_perc$Recreation <- factor(water_qual_perc$Recreation)
 water_qual_perc$RiverSports <- factor(water_qual_perc$RiverSports)
 water_qual_perc$PureAir <- factor(water_qual_perc$PureAir)
 water_qual_perc$NaturalRelaxxation <- factor(water_qual_perc$NaturalRelaxxation)
-water_qual_perc$Ninguno <- factor(water_qual_perc$Ninguno)
 water_qual_perc$WaterServices <- factor(water_qual_perc$WaterServices, ordered = TRUE, levels = c(0, 3, 2, 1))
 water_qual_perc$AgriculturalUse <- factor(water_qual_perc$AgriculturalUse, ordered = TRUE, levels = c(0, 3, 2, 1))
 water_qual_perc$LiveStock <- factor(water_qual_perc$LiveStock, ordered = TRUE, levels = c(0, 3, 2, 1))
@@ -133,6 +132,37 @@ water_qual_perc$ServiceAmount <- factor(water_qual_perc$ServiceAmount, ordered =
 
 water_qual_perc <- na.omit(water_qual_perc) #Crucial for dealing with factors 
 
+
+#======================Create Test, Validation, and Training Sets=============
+#spec = c(train = .7, test = .3)
+
+#g = sample(cut(
+ # seq(nrow(water_qual_perc)), 
+  #nrow(water_qual_perc)*cumsum(c(0,spec)),
+  #labels = names(spec)
+#))
+
+#res = split(water_qual_perc, g)
+
+lambdas <- seq(0, 200, 5)
+lambda_opt <- matrix(data = NA, nrow = 40, ncol = 2)
+for (i in lambdas){
+  nonconflcit_glmm <- glmmLasso(hilo~ComType+ ServiceAmount + ImpWaterQuality + ImpElectricity + ImpRoads + ImpTrash +
+                                  ImpPublicSanitation + ImpPublicTransport + ImpPublicSchool + ImpAirQuality +
+                                  ProAgriChem +
+                                  ProTrash + ProWaterContam + ProAirContan + Mosquitos + Traffic + Dust + Noise + Watewater +
+                                  WaterQuality + DrinkCook + Irrigation + CattleTroughs + WashClothes +
+                                  Recreation + RiverSports + PureAir +
+                                  NaturalRelaxxation  + WaterServices + AgriculturalUse + LiveStock + Debris + Mining +
+                                  Deforestation + ApplyLaws + Fines + Incentives + EducationPrograms + Gender + Age + Education +
+                                  Residency + UsageAmount + UTMY, rnd = list(ComNumber=~1), lambda=i, data=water_qual_perc,
+                                family=binomial(link="logit"))
+  lambda_opt[i/5,1] <- i
+  lambda_opt[i/5,2] <- nonconflcit_glmm$aic
+  
+}
+
+#From training set, lambda = 35
 
 #======================================
 #Model Omitting covariate factors
@@ -223,6 +253,82 @@ binary_prob_plot('RiverSports', -.63)
 binary_prob_plot('WashClothes', .6260)
 
 #usage o
+
+
+#============Look at significant odds ratios ========
+sorted_coeffs$OddsRatio <- exp(sorted_coeffs$`LASSO LogOdds Coeff`)
+binary_vars <- c('PureAir1', 'RiverSports1', 'WashClothes1', 'DrinkCook1', 'Irrigation1', 'ComTypeU', 'ComTypeP')
+binary_vars_sub <- subset(sorted_coeffs, rownames(sorted_coeffs) %in% binary_vars)
+binary_vars_sub$dist <- abs(binary_vars_sub$OddsRatio - 1)
+binary_vars_sub <- binary_vars_sub[order(-binary_vars_sub$dist),] 
+
+
+legend_cols <- c('darkblue', 'darkolivegreen4', 'darkorchid3', 'firebrick', 'goldenrod', 'maroon1', 'black')
+
+par(xpd=TRUE)
+plot(binary_vars_sub$OddsRatio, xaxt = 'n', ylim = c(0,2), pch = 19, cex = 1.8, col = legend_cols, ylab = 'Odds Ratio', xlab = '', main = 'Change in Odds Ratio based on Presence of Variable')
+lines(c(0.75, 7.25), c(1, 1), col = 'darkgrey', lty = 'dashed')
+for (i in 1:7){
+  lines(c(i, i), c(1, binary_vars_sub$OddsRatio[i]), lwd = 2, col = legend_cols[i])
+}
+text(2, 0.9, '1:1 Odds Ratio', cex = 0.8, col ='gray42')
+legend(c(1,7), c(-0.3, -0.1), c('Pure Air', 'Washing Clothes', 'Drinking/Cooking', 'River Sports', 'Irrigation', 'Urban Com.', 'Pastural Com.'), bty = 'n', col = legend_cols, pch = 19, lty = 1, ncol = 2)
+
+####==============Create Master Plot for everything but usage amount
+#Deforestation
+curve(exp(.4466*x -(.2232*x^2)), 0, 3, ylab = 'Odds Ratio', xaxt = 'n', ylim = c(0, 3), lwd = 2)
+def <- function(x) exp(.4466*x -(.2232*x^2))
+xtick<-seq(0, 3, by=1)
+axis(side=1, at=xtick, labels = FALSE)
+text(x=xtick,  par("usr")[3], 
+     labels = xtick, pos = 1, xpd = TRUE, offset = 0.7)
+#Livestock
+curve(exp(.16481*x), 0, 3, add = TRUE, lwd = 2)
+live <- function(x) exp(.16481*x)
+
+#Dust
+curve(exp(.25266*x^2 + 0.017546*x^3), add = T, lty = 'twodash', lwd = 2)
+dust <- function(x) exp(.25266*x^2 + 0.017546*x^3) 
+
+#ProAgriChem
+curve(exp(-.1031*x^2), 0, 3, add = T, lty = 'twodash', lwd = 2)
+agrichem <- function(x) exp(-.1031*x^2)
+
+#ProAirContam
+curve(exp(0.019847*x^2 - (.01477*x^3)), 0,3, add = T, lty = 'twodash', lwd = 2)
+aircontam <- function(x) exp(0.019847*x^2 - (.01477*x^3))
+
+#create a discrete plot from this information
+xs <- c(0.25, 0.5, 0.75, 1, 1.25, 1.75, 2, 2.25, 2.5, 2.75, 3.25, 3.5, 3.75, 4, 4.25)
+odds <- c(def(1), live(1), dust(1), agrichem(1), aircontam(1), def(2), live(2), dust(2), agrichem(2), aircontam(2), def(3), live(3), dust(3), agrichem(3), aircontam(3))
+group <- c(rep(1, 5), rep(2, 5), rep(3, 5))
+color <- rep(c('cyan3', 'darkorchid3', 'orange3', 'orangered4', 'gold2'), 3)
+treatment <- rep(c('def', 'live', 'dust', 'agrichem', 'aircontam'), 3)
+discrete_vars <- data.frame(odds, group, treatment, color)
+discrete_vars$dist <- abs(discrete_vars$odds - 1)
+discrete_vars <- discrete_vars[
+  with(discrete_vars, order(group, -dist)),
+  ]
+discrete_vars$x <- xs
+
+par(mar=c(5.1, 4.1, 4.1, 9.1),xpd=TRUE)
+plot(discrete_vars$x, discrete_vars$odds, pch = 19, cex = 1.6, ylim = c(0,3.5), col = as.character(discrete_vars$color), xaxt = 'n', ylab = 'Odds Ratio', xlab = '', main = 'Change in Odds Ratio based on Degree of Concern')
+#gap.plot(discrete_vars$x, discrete_vars$odds, gap = c(3.5, 14), ytics = c(seq(0, 3.5, .5), seq(14, 15.5, 0.5)), pch = 19, cex = 1.6, col = as.character(discrete_vars$color), xaxt = 'n', ylab = 'Odds Ratio', xlab = '', main = 'Change in Odds Ratio based on Degree of Concern')
+lines(c(0, 4.4), c(1, 1), col = 'darkgrey', lty = 'dashed')
+for (i in 1:15){
+  if (i == 11){
+    lines(c(discrete_vars$x[i], discrete_vars$x[i]), c(1, 3.65), lwd = 2, col = as.character(discrete_vars$color[i]))
+  }
+  else{
+    lines(c(discrete_vars$x[i], discrete_vars$x[i]), c(1, discrete_vars$odds[i]), lwd = 2, col = as.character(discrete_vars$color[i]))
+}
+    }
+text(3.3, 3.5, '*Ratio = 15.6', adj = 0, cex = 0.8, col = 'orange3')
+xtick<-c(0.75, 2.25,3.75)
+axis(side=1, at=xtick, labels = FALSE)
+text(x=xtick,  par("usr")[3], 
+     labels = c('Low Concern', 'Medium Concern', 'High Concern'), pos = 1, xpd = TRUE, offset = 0.7)
+legend(4.5,3.5, c('Deforestation', 'Livestock', 'Dust', 'Agricultural \n Chemicals', 'Air \n Contamination'), bty = 'n', col = color, pch = 19, lty = 1, pt.cex = 1, cex = 0.8)
 #=====================Function for binaryprobplots==========================================
 #Create a function to plot binary probability changes
 binary_prob_plot <- function(your_var, model_logodds){
