@@ -215,7 +215,7 @@ prob_calc <- function(x, startprob){
 }
 
 poly_prob_calc <- {}
-#==============================================================
+#==============Usage Amount Curve================================================
 
 #Usage Amount Curve
 curve(exp(1.8902*x - 1.04)/(1 + exp(1.8902*x - 1.04)),  0, 9, ylim = c(0,1.01), lwd = 1.8, xaxt="n", ylab = 'Probablity of percieving above average PWQ', xlab = 'Usage Amount of Stream', main = "Behavior of Usage Amount")
@@ -242,7 +242,7 @@ for (i in xs){
 }
 plot(xs, usage_vec, main = 'Proportions of High PWQ from Survey')
 
-#=================================================================
+#===================Binary Prob Plots==============================================
 ##Usage of River for Pure Air
 binary_prob_plot('PureAir', 0.6457)
 
@@ -263,8 +263,8 @@ binary_vars_sub$dist <- abs(binary_vars_sub$OddsRatio - 1)
 binary_vars_sub <- binary_vars_sub[order(-binary_vars_sub$dist),] 
 
 
-legend_cols <- c('darkblue', 'darkolivegreen4', 'darkorchid3', 'firebrick', 'goldenrod', 'maroon1', 'black')
-
+#legend_cols <- c('darkblue', 'darkolivegreen4', 'darkorchid3', 'firebrick', 'goldenrod', 'maroon1', 'black')
+legend_cols <- c('aquamarine4', 'slateblue2', 'turquoise2', 'navyblue', 'seagreen2', 'darkgoldenrod2', 'brown')
 par(xpd=TRUE)
 plot(binary_vars_sub$OddsRatio, xaxt = 'n', ylim = c(0,2), pch = 19, cex = 1.8, col = legend_cols, ylab = 'Odds Ratio', xlab = '', main = 'Change in Odds Ratio based on Presence of Variable')
 lines(c(0.75, 7.25), c(1, 1), col = 'darkgrey', lty = 'dashed')
@@ -298,6 +298,9 @@ agrichem <- function(x) exp(-.1031*x^2)
 curve(exp(0.019847*x^2 - (.01477*x^3)), 0,3, add = T, lty = 'twodash', lwd = 2)
 aircontam <- function(x) exp(0.019847*x^2 - (.01477*x^3))
 
+#Pick distinctive palettes
+library(palettetown)
+
 #create a discrete plot from this information
 xs <- c(0.25, 0.5, 0.75, 1, 1.25, 1.75, 2, 2.25, 2.5, 2.75, 3.25, 3.5, 3.75, 4, 4.25)
 odds <- c(def(1), live(1), dust(1), agrichem(1), aircontam(1), def(2), live(2), dust(2), agrichem(2), aircontam(2), def(3), live(3), dust(3), agrichem(3), aircontam(3))
@@ -329,6 +332,105 @@ axis(side=1, at=xtick, labels = FALSE)
 text(x=xtick,  par("usr")[3], 
      labels = c('Low Concern', 'Medium Concern', 'High Concern'), pos = 1, xpd = TRUE, offset = 0.7)
 legend(4.5,3.5, c('Deforestation', 'Livestock', 'Dust', 'Agricultural \n Chemicals', 'Air \n Contamination'), bty = 'n', col = color, pch = 19, lty = 1, pt.cex = 1, cex = 0.8)
+
+##=================Levels of Improvement ==================
+#ImpPublicSanitation
+imp_pubsan <- function(x) exp(-.158*x -0.06526*x^2)
+
+#ImpTrash
+imp_trash <- function(x) exp(-0.05548*x)
+
+#ImpElectricity
+
+imp_electric <- function(x) exp(-0.03241*x^2)
+
+#ImpRoads
+imp_roads <- function(x) exp(-0.01356*x)
+
+#lets grab colors from piratepal (cause it's fun)
+library(yarrr) #create a function before pushing the final code
+
+#Create Plot
+xs <- c(seq(0.25,1,0.25), seq(1.5,2.25, 0.25), seq(2.75, 3.5, 0.25))
+odds <- c(imp_pubsan(1), imp_trash(1), imp_electric(1), imp_roads(1), imp_pubsan(2), imp_trash(2), imp_electric(2), imp_roads(2),
+          imp_pubsan(3), imp_trash(3), imp_electric(3), imp_roads(3))
+group <- c(rep(1, 4), rep(2, 4), rep(3, 4))
+treatment <- rep(c('pubsan', 'trash', 'electric', 'roads'), 3)
+color <- rep(c('#5F8CF4FF', '#E27A48FF', '#605646FF', '#DCD6FCFF'), 3)
+discrete_vars <- data.frame(odds, group, treatment, color) ##Create a function to make these plots?
+discrete_vars$dist <- abs(discrete_vars$odds - 1)
+discrete_vars <- discrete_vars[
+  with(discrete_vars, order(group, -dist)),
+  ]
+discrete_vars$x <- xs
+par(mar=c(5.1, 4.1, 4.1, 9.1),xpd=TRUE)
+plot(discrete_vars$x, discrete_vars$odds, pch = 19, cex = 1.6, ylim = c(0,1.5), col = as.character(discrete_vars$color), xaxt = 'n', ylab = 'Odds Ratio', xlab = 'Degree of Desire', main = 'Change in Odds Ratio Based on Desire to Improve Services')
+lines(c(0.1, 3.65), c(1, 1), col = 'darkgrey', lty = 'dashed')
+for (i in 1:12){
+    lines(c(discrete_vars$x[i], discrete_vars$x[i]), c(1, discrete_vars$odds[i]), lwd = 2, col = as.character(discrete_vars$color[i]))
+}
+
+xtick<-c(0.625, 1.875, 3.125)
+axis(side=1, at=xtick, labels = FALSE)
+text(x=xtick,  par("usr")[3], 
+     labels = c('Low', 'Medium', 'High'), pos = 1, xpd = TRUE, offset = 0.7)
+legend(3.7,1.5, c('Public Sanitation', 'Trash Collection', 'Electricity', 'Roads'), bty = 'n', col = color, pch = 19, lty = 1, pt.cex = 1, cex = 0.9)
+
+#========UsageAmount Line Plot =================
+#create fxn
+usage_amt <- function(x) exp(1.89*x)
+usage_vec <- vector()
+for (i in 1:11){
+  usage_vec[i] <- usage_amt(i - 1)
+}
+par(mfrow = c(2, 2))
+
+xs <- seq(0, 10, 1)
+plot(xs, usage_vec, pch = 19, cex = 1.8, xlab = 'Number of Uses', col = 'darkblue', ylab = 'Odds Ratio', main = 'Change in Odds Ratio based on Usage Amount')
+lines(xs, usage_vec, col = 'darkblue')
+abline(h = 1, col ='darkgrey', lty = 'dashed')
+
+plot(xs[1:3], usage_vec[1:3], pch = 19, xaxt = 'n', cex = 1.8, xlab = 'Number of Uses', col = 'darkblue', ylab = 'Odds Ratio', main = 'Change in Odds Ratio based on Usage Amount')
+lines(xs[1:3], usage_vec[1:3], col = 'darkblue')
+abline(h = 1, col ='darkgrey', lty = 'dashed')
+xtick<-c(0, 1, 2)
+axis(side=1, at=xtick, labels = FALSE)
+text(x=xtick,  par("usr")[3], 
+     labels = xtick, pos = 1, xpd = TRUE, offset = 0.7)
+
+plot(xs[3:6], usage_vec[3:6], pch = 19, xaxt = 'n', cex = 1.8, xlab = 'Number of Uses', col = 'darkblue', ylab = 'Odds Ratio', main = 'Change in Odds Ratio based on Usage Amount')
+lines(xs[3:6], usage_vec[3:6], col = 'darkblue')
+abline(h = 1, col ='darkgrey', lty = 'dashed')
+xtick<-c(2, 3, 4, 5)
+axis(side=1, at=xtick, labels = FALSE)
+text(x=xtick,  par("usr")[3], 
+     labels = xtick, pos = 1, xpd = TRUE, offset = 0.7)
+
+plot(xs[6:10], usage_vec[6:10], pch = 19, xaxt = 'n', cex = 1.8, xlab = 'Number of Uses', col = 'darkblue', ylab = 'Odds Ratio', main = 'Change in Odds Ratio based on Usage Amount')
+lines(xs[6:10], usage_vec[6:10], col = 'darkblue')
+abline(h = 1, col ='darkgrey', lty = 'dashed')
+xtick<-c(5, 6, 7, 8, 9)
+axis(side=1, at=xtick, labels = FALSE)
+text(x=xtick,  par("usr")[3], 
+     labels = xtick, pos = 1, xpd = TRUE, offset = 0.7)
+
+
+#============Behavior of Incentives as Motivation==========
+incents <- function(x) exp(-0.60681*x^2)
+incent_vec <- vector()
+xs <- seq(0, 3, 1)
+for (i in 1:4){
+  incent_vec[i] <- incents(i - 1)
+}
+
+plot(xs, incent_vec, pch = 19, ylim = c(0, 2), xaxt = 'n', xlab = '', cex = 1.8, col = 'darkblue', ylab = 'Odds Ratio', main = 'Change in Odds Ratio based on Incentives')
+lines(xs, incent_vec, col = 'darkblue')
+abline(h = 1, col ='darkgrey', lty = 'dashed')
+xtick<-c(0, 1, 2, 3)
+axis(side=1, at=xtick, labels = FALSE)
+text(x=xtick,  par("usr")[3], 
+     labels = xtick, pos = 1, xpd = TRUE, offset = 0.7)
+
 #=====================Function for binaryprobplots==========================================
 #Create a function to plot binary probability changes
 binary_prob_plot <- function(your_var, model_logodds){
