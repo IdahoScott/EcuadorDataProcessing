@@ -288,7 +288,7 @@ live <- function(x) exp(.16481*x)
 
 #Dust
 curve(exp(.25266*x^2 + 0.017546*x^3), add = T, lty = 'twodash', lwd = 2)
-dust <- function(x) exp(.25266*x^2 + 0.017546*x^3) 
+dust <- function(x) exp(-.25266*x^2 + 0.017546*x^3) 
 
 #ProAgriChem
 curve(exp(-.1031*x^2), 0, 3, add = T, lty = 'twodash', lwd = 2)
@@ -315,23 +315,17 @@ discrete_vars <- discrete_vars[
 discrete_vars$x <- xs
 
 par(mar=c(5.1, 4.1, 4.1, 9.1),xpd=TRUE)
-plot(discrete_vars$x, discrete_vars$odds, pch = 19, cex = 1.6, ylim = c(0,3.5), col = as.character(discrete_vars$color), xaxt = 'n', ylab = 'Odds Ratio', xlab = '', main = 'Change in Odds Ratio based on Degree of Concern')
+plot(discrete_vars$x, discrete_vars$odds, pch = 19, cex = 1.6, ylim = c(0,2), col = as.character(discrete_vars$color), xaxt = 'n', ylab = 'Odds Ratio', xlab = '', main = 'Change in Odds Ratio based on Degree of Concern')
 #gap.plot(discrete_vars$x, discrete_vars$odds, gap = c(3.5, 14), ytics = c(seq(0, 3.5, .5), seq(14, 15.5, 0.5)), pch = 19, cex = 1.6, col = as.character(discrete_vars$color), xaxt = 'n', ylab = 'Odds Ratio', xlab = '', main = 'Change in Odds Ratio based on Degree of Concern')
 lines(c(0, 4.4), c(1, 1), col = 'darkgrey', lty = 'dashed')
 for (i in 1:15){
-  if (i == 11){
-    lines(c(discrete_vars$x[i], discrete_vars$x[i]), c(1, 3.65), lwd = 2, col = as.character(discrete_vars$color[i]))
-  }
-  else{
     lines(c(discrete_vars$x[i], discrete_vars$x[i]), c(1, discrete_vars$odds[i]), lwd = 2, col = as.character(discrete_vars$color[i]))
-}
     }
-text(3.3, 3.5, '*Ratio = 15.6', adj = 0, cex = 0.8, col = 'orange3')
 xtick<-c(0.75, 2.25,3.75)
 axis(side=1, at=xtick, labels = FALSE)
 text(x=xtick,  par("usr")[3], 
      labels = c('Low Concern', 'Medium Concern', 'High Concern'), pos = 1, xpd = TRUE, offset = 0.7)
-legend(4.5,3.5, c('Deforestation', 'Livestock', 'Dust', 'Agricultural \n Chemicals', 'Air \n Contamination'), bty = 'n', col = color, pch = 19, lty = 1, pt.cex = 1, cex = 0.8)
+legend(4.5,2, c('Deforestation', 'Livestock', 'Dust', 'Agricultural \n Chemicals', 'Air \n Contamination'), bty = 'n', col = color, pch = 19, lty = 1, pt.cex = 1, cex = 0.8)
 
 ##=================Levels of Improvement ==================
 #ImpPublicSanitation
@@ -428,8 +422,64 @@ lines(xs, incent_vec, col = 'darkblue')
 abline(h = 1, col ='darkgrey', lty = 'dashed')
 xtick<-c(0, 1, 2, 3)
 axis(side=1, at=xtick, labels = FALSE)
-text(x=xtick,  par("usr")[3], 
+text(x=xtick,  par("usr")[  3], 
      labels = xtick, pos = 1, xpd = TRUE, offset = 0.7)
+
+
+#========Exploring Usage Amount============================
+#Let's create 3 bins with larger sample sizes
+#zero remains zero, 1-3 become low, 4+ become high
+for (i in 1:392){
+  if (water_qual_perc$UsageAmount[i] == 0){
+    water_qual_perc$UsageBins[i] <- 0
+  }
+  if (water_qual_perc$UsageAmount[i] == 1 | water_qual_perc$UsageAmount[i] ==2 | water_qual_perc$UsageAmount[i] == 3){
+    water_qual_perc$UsageBins[i] <- 1
+  }
+  if (water_qual_perc$UsageAmount[i] ==3 | water_qual_perc$UsageAmount[i] ==4 | water_qual_perc$UsageAmount[i] ==5 | water_qual_perc$UsageAmount[i] ==6 | water_qual_perc$UsageAmount[i] ==7 | water_qual_perc$UsageAmount[i] ==8| water_qual_perc$UsageAmount[i] ==9)
+  {
+     water_qual_perc$UsageBins[i] <- 2
+  }
+}
+
+water_qual_perc$UsageBins <- factor(water_qual_perc$UsageBins, ordered = T, levels=c(0, 1, 2))
+water_qual_perc <- na.omit(water_qual_perc)
+
+lambdas <- seq(0, 200, 5)
+lambda_opt <- matrix(data = NA, nrow = 40, ncol = 2)
+for (i in lambdas){
+  nonconflcit_glmm <- glmmLasso(hilo~ComType+ ServiceAmount + ImpWaterQuality + ImpElectricity + ImpRoads + ImpTrash +
+                                  ImpPublicSanitation + ImpPublicTransport + ImpPublicSchool + ImpAirQuality +
+                                  ProAgriChem +
+                                  ProTrash + ProWaterContam + ProAirContan + Mosquitos + Traffic + Dust + Noise + Watewater +
+                                  WaterQuality + DrinkCook + Irrigation + CattleTroughs + WashClothes +
+                                  Recreation + RiverSports + PureAir +
+                                  NaturalRelaxxation  + WaterServices + AgriculturalUse + LiveStock + Debris + Mining +
+                                  Deforestation + ApplyLaws + Fines + Incentives + EducationPrograms + Gender + Age + Education +
+                                  Residency + UsageBins + UTMY, rnd = list(ComNumber=~1), lambda=i, data=water_qual_perc,
+                                family=binomial(link="logit"))
+  lambda_opt[i/5,1] <- i
+  lambda_opt[i/5,2] <- nonconflcit_glmm$aic
+  
+}
+
+
+nonconflcit_glmm <- glmmLasso(hilo~ComType+ ServiceAmount + ImpWaterQuality + ImpElectricity + ImpRoads + ImpTrash +
+                                ImpPublicSanitation + ImpPublicTransport + ImpPublicSchool + ImpAirQuality +
+                                ProAgriChem +
+                                ProTrash + ProWaterContam + ProAirContan + Mosquitos + Traffic + Dust + Noise + Watewater +
+                                WaterQuality + DrinkCook + Irrigation + CattleTroughs + WashClothes +
+                                Recreation + RiverSports + PureAir +
+                                NaturalRelaxxation  + WaterServices + AgriculturalUse + LiveStock + Debris + Mining +
+                                Deforestation + ApplyLaws + Fines + Incentives + EducationPrograms + Gender + Age + Education +
+                                Residency + UsageBins + UTMY, rnd = list(ComNumber=~1), lambda=40, data=water_qual_perc,
+                              family=binomial(link="logit"))
+
+coeffs <- as.data.frame(as.matrix(nonconflcit_glmm$coefficients))
+coeffs$ABS_VAL <- abs(coeffs$V1)
+sorted_coeffs <- coeffs[order(-coeffs$ABS_VAL),] #55 variables from survey
+colnames(sorted_coeffs) <- c("LASSO LogOdds Coeff", "|LASSO Coeff|")
+sorted_coeffs 
 
 #=====================Function for binaryprobplots==========================================
 #Create a function to plot binary probability changes
