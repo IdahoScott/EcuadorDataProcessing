@@ -1,7 +1,7 @@
-library(sp)
-library(rgdal)
-library(raster)
-library(spdep)
+#library(sp)
+#library(rgdal)
+#library(raster)
+#library(spdep)
 library(mctest)
 library(glmmLasso)
 
@@ -480,75 +480,112 @@ coeffs$ABS_VAL <- abs(coeffs$V1)
 sorted_coeffs <- coeffs[order(-coeffs$ABS_VAL),] #55 variables from survey
 colnames(sorted_coeffs) <- c("LASSO LogOdds Coeff", "|LASSO Coeff|")
 sorted_coeffs 
+write.csv(sorted_coeffs, 'Coeffs_fixed_usage.csv')
 
-#=====================Function for binaryprobplots==========================================
-#Create a function to plot binary probability changes
-binary_prob_plot <- function(your_var, model_logodds){
-  starting_prob <- summary(water_qual_perc[[your_var]])[2]/length(water_qual_perc[[your_var]])
-  model_prob <- prob_calc(model_logodds, starting_prob)
-  ys <- c(starting_prob, model_prob) ##how to interpret probabilities? 
-  var_step <- stepfun(1, ys, 0)
-  plot(var_step, verticals=FALSE, xaxt = 'n', xlim = c(0, 2), ylim = c(0,1), lwd = 2, 
-       xlab = 'Binary Presence Indicator', ylab = "Prob. of above average PWQ", main = your_var)
-  abline(h=0.5, lty='dotted', col = 'red')
-  xtick <- c(0.5, 1.5)
-  axis(side = 1, at= xtick, labels = FALSE)
-  text(x=xtick, par("usr")[3], labels = c('Absent', 'Present'), pos = 1, xpd = T, offset = 0.7)
-  return(ys)
+#Of course it changes the probabilitites and relative importance of variables
+
+#=======Recreate binary plot==============================
+sorted_coeffs$OddsRatio <- exp(sorted_coeffs$`LASSO LogOdds Coeff`)
+binary_vars <- c('DrinkCook1', 'PureAir1', 'WashClothes1', 'Irrigation1', 'RiverSports1', 'CattleTroughs1', 'NaturalRelaxxation1', 'ComTypeU', 'ComTypeP')
+binary_vars_sub <- subset(sorted_coeffs, rownames(sorted_coeffs) %in% binary_vars)
+binary_vars_sub$dist <- abs(binary_vars_sub$OddsRatio - 1)
+binary_vars_sub <- binary_vars_sub[order(-binary_vars_sub$dist),] 
+
+
+#legend_cols <- c('darkblue', 'darkolivegreen4', 'darkorchid3', 'firebrick', 'goldenrod', 'maroon1', 'black')
+legend_cols <- c('aquamarine4', 'blue', 'slateblue2', 'orchid3', 'turquoise2', 'navyblue', 'seagreen2', 'darkgoldenrod2', 'brown')
+par(mar=c(5.1, 4.1, 4.1, 9.1),xpd=TRUE)
+plot(binary_vars_sub$OddsRatio, xaxt = 'n', ylim = c(0,2), pch = 19, cex = 1.8, col = legend_cols, ylab = 'Odds Ratio', xlab = '', main = 'Change in Odds Ratio based on Presence of Variable')
+lines(c(0.75, 9.25), c(1, 1), col = 'darkgrey', lty = 'dashed')
+for (i in 1:9){
+  lines(c(i, i), c(1, binary_vars_sub$OddsRatio[i]), lwd = 2, col = legend_cols[i])
 }
-#========================================
+text(2, 0.9, '1:1 Odds Ratio', cex = 0.8, col ='gray42')
+legend(9.3, 2, c('Drinking/Cooking', 'Pure Air', 'Washing Clothes', 'Irrigation', 'River Sports', 'Cattle Troughs', 'Natural Relaxation',' Urban Com.','Pastoral Com.'), bty = 'n', col = legend_cols, pch = 19, lty = 1)
 
-##Deforestation as major environmental concern
-curve(exp(0.62*x -.254*x^2),  0, 3, ylim = c(0,2),xaxt="n", ylab = 'Odds Ratio of percieving above average PWQ', xlab = 'Concern over deforestation', main = "Behavior of Deforestation")
-abline(h = 1, col = 'red', lty= 'dashed')
-xtick<-seq(0, 3, by=1)
+#========= Desires to Improve ================
+#ImpPublicSanitation
+imp_pubsan <- function(x) exp(-.06819*x -0.065212*x^2)
+
+#ImpTrash
+imp_trash <- function(x) exp(-0.054631*x)
+
+#ImpPublicTran
+imp_tran <- function(x) exp(-0.03845*x)
+
+#ImpElectricity
+
+imp_electric <- function(x) exp(-0.03633*x^2)
+
+#ImpRoads
+imp_roads <- function(x) exp(-0.024662*x^2 - 0.01906*x)
+
+#lets grab colors from piratepal (cause it's fun)
+library(yarrr) #create a function before pushing the final code
+
+#Create Plot
+xs <- c(seq(0.25,1.25,0.25), seq(1.75,2.75, 0.25), seq(3, 4, 0.25))
+odds <- c(imp_pubsan(1), imp_trash(1), imp_electric(1), imp_roads(1), imp_tran(1), imp_pubsan(2), imp_trash(2), imp_electric(2), imp_roads(2),imp_tran(2),
+          imp_pubsan(3), imp_trash(3), imp_electric(3), imp_roads(3), imp_tran(3))
+group <- c(rep(1, 5), rep(2, 5), rep(3, 5))
+treatment <- rep(c('pubsan', 'trash', 'electric', 'roads', 'tran'), 3)
+color <- rep(c("#FBCF35FF", "#ED4C1CFF", "#9C7E70FF", "#5AC2F1FF", "#11776CFF" ), 3)
+discrete_vars <- data.frame(odds, group, treatment, color) ##Create a function to make these plots?
+discrete_vars$dist <- abs(discrete_vars$odds - 1)
+discrete_vars <- discrete_vars[
+  with(discrete_vars, order(group, -dist)),
+  ]
+discrete_vars$x <- xs
+par(mar=c(5.1, 4.1, 4.1, 9.1),xpd=TRUE)
+plot(discrete_vars$x, discrete_vars$odds, pch = 19, cex = 1.6, ylim = c(0,1.5), col = as.character(discrete_vars$color), xaxt = 'n', ylab = 'Odds Ratio', xlab = 'Degree of Desire', main = 'Change in Odds Ratio Based on Desire to Improve Services')
+lines(c(0.1, 4.15), c(1, 1), col = 'darkgrey', lty = 'dashed')
+for (i in 1:15){
+  lines(c(discrete_vars$x[i], discrete_vars$x[i]), c(1, discrete_vars$odds[i]), lwd = 2, col = as.character(discrete_vars$color[i]))
+}
+
+xtick<-c(0.75, 2.25, 3.5)
 axis(side=1, at=xtick, labels = FALSE)
 text(x=xtick,  par("usr")[3], 
-     labels = xtick, pos = 1, xpd = TRUE, offset = 0.7)
+     labels = c('Low', 'Medium', 'High'), pos = 1, xpd = TRUE, offset = 0.7)
+legend(4.15,1.5, c('Public Sanitation', 'Trash Collection', 'Electricity', 'Roads', 'Transit'), bty = 'n', col = color, pch = 19, lty = 1, pt.cex = 1, cex = 0.9)
 
-##Dust as an environmental problem
-curve(exp(-.467*x^2),  0, 3, ylim = c(0,2),xaxt="n", ylab = 'Odds Ratio of percieving above average PWQ', xlab = 'Concern over dust', main = "Behavior of Dust")
-abline(h = 1, col = 'red', lty= 'dashed')
-xtick<-seq(0, 3, by=1)
+#============Environmental and water concerns ===========
+#Deforestation
+def <- function(x) exp(.55465*x -(.3376*x^2))
+
+#Dust
+dust <- function(x) exp(-.1899*x^2 + 0.012912*x^3) 
+
+#ProAirContam
+aircontam <- function(x) exp(0.024646*x^2 - (.022338*x^3))
+
+#Pick distinctive palettes
+library(palettetown)
+
+#create a discrete plot from this information
+xs <- c(0.25, 0.5, 0.75, 1.25, 1.5, 1.75, 2.25, 2.5, 2.75)
+odds <- c(def(1), dust(1), aircontam(1), def(2), dust(2), aircontam(2), def(3), dust(3), aircontam(3))
+group <- c(rep(1, 3), rep(2, 3), rep(3, 3))
+color <- rep(c('darkorchid3', 'orange3', 'gold2'), 3)
+treatment <- rep(c('def', 'dust',  'aircontam'), 3)
+discrete_vars <- data.frame(odds, group, treatment, color)
+discrete_vars$dist <- abs(discrete_vars$odds - 1)
+discrete_vars <- discrete_vars[
+  with(discrete_vars, order(group, -dist)),
+  ]
+discrete_vars$x <- xs
+
+par(mar=c(5.1, 4.1, 4.1, 9.1),xpd=TRUE)
+plot(discrete_vars$x, discrete_vars$odds, pch = 19, cex = 1.6, ylim = c(0,2), col = as.character(discrete_vars$color), xaxt = 'n', ylab = 'Odds Ratio', xlab = '', main = 'Change in Odds Ratio based on Degree of Concern')
+#gap.plot(discrete_vars$x, discrete_vars$odds, gap = c(3.5, 14), ytics = c(seq(0, 3.5, .5), seq(14, 15.5, 0.5)), pch = 19, cex = 1.6, col = as.character(discrete_vars$color), xaxt = 'n', ylab = 'Odds Ratio', xlab = '', main = 'Change in Odds Ratio based on Degree of Concern')
+lines(c(0.15, 2.85), c(1, 1), col = 'darkgrey', lty = 'dashed')
+for (i in 1:9){
+  lines(c(discrete_vars$x[i], discrete_vars$x[i]), c(1, discrete_vars$odds[i]), lwd = 2, col = as.character(discrete_vars$color[i]))
+}
+xtick<-c(0.5, 1.5,2.5)
 axis(side=1, at=xtick, labels = FALSE)
 text(x=xtick,  par("usr")[3], 
-     labels = xtick, pos = 1, xpd = TRUE, offset = 0.7)
+     labels = c('Low Concern', 'Medium Concern', 'High Concern'), pos = 1, xpd = TRUE, offset = 0.7)
+legend(3,2, c('Deforestation', 'Dust', 'Air \n Contamination'), bty = 'n', col = color, pch = 19, lty = 1, pt.cex = 1, cex = 0.8)
 
-##Livestock as an environmental concern
-curve(exp(0.3*x),  0, 3, ylim = c(0,4),xaxt="n", ylab = 'Odds Ratio of percieving above average PWQ', xlab = 'Concern over livestock', main = "Behavior of Livestock concern")
-abline(h = 1, col = 'red', lty= 'dashed')
-xtick<-seq(0, 3, by=1)
-axis(side=1, at=xtick, labels = FALSE)
-text(x=xtick,  par("usr")[3], 
-     labels = xtick, pos = 1, xpd = TRUE, offset = 0.7)
-
-##Weight services from 'common' to 'rare'? create a new metric based on presence, where the lowest would be 
-
-
-##Agricultural Chemicals as a Main Source of Contamination
-curve(exp(-.1875*x^2),  0, 3, ylim = c(0,2),xaxt="n", ylab = 'Odds Ratio of percieving above average PWQ', xlab = 'Concern over agrichem', main = "Behavior of AgriChem")
-abline(h = 1, col = 'red', lty= 'dashed')
-xtick<-seq(0, 3, by=1)
-axis(side=1, at=xtick, labels = FALSE)
-text(x=xtick,  par("usr")[3], 
-     labels = xtick, pos = 1, xpd = TRUE, offset = 0.7)
-
-###Desire to improve public sanitation
-curve(exp(-.144*x),  0, 3, ylim = c(0,2),xaxt="n", ylab = 'Odds Ratio of percieving above average PWQ', xlab = 'Desire to Improve Public Sanitation', main = "Behavior of ImpPublicSanitation")
-abline(h = 1, col = 'red', lty= 'dashed')
-xtick<-seq(0, 3, by=1)
-axis(side=1, at=xtick, labels = FALSE)
-text(x=xtick,  par("usr")[3], 
-     labels = xtick, pos = 1, xpd = TRUE, offset = 0.7)
-
-
-##Usage Amount
-curve(exp(-0.051*x^2),  0, 9, ylim = c(0,2),xaxt="n", ylab = 'Odds Ratio of percieving above average PWQ', xlab = 'Number of Usees', main = "Behavior of Usage Amount")
-abline(h = 1, col = 'red', lty= 'dashed')
-xtick<-seq(0, 9, by=1)
-axis(side=1, at=xtick, labels = FALSE)
-text(x=xtick,  par("usr")[3], 
-     labels = xtick, pos = 1, xpd = TRUE, offset = 0.7)
-
-
-#======test
+#================Incentives Behavior====================
