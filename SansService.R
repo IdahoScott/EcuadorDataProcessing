@@ -589,3 +589,39 @@ text(x=xtick,  par("usr")[3],
 legend(3,2, c('Deforestation', 'Dust', 'Air \n Contamination'), bty = 'n', col = color, pch = 19, lty = 1, pt.cex = 1, cex = 0.8)
 
 #================Incentives Behavior====================
+incents <- function(x) exp(-0.4467*x^2)
+incent_vec <- vector()
+xs <- seq(0, 3, 1)
+for (i in 1:4){
+  incent_vec[i] <- incents(i - 1)
+}
+
+plot(xs, incent_vec, pch = 19, ylim = c(0, 2), xaxt = 'n', xlab = '', cex = 1.8, col = 'darkblue', ylab = 'Odds Ratio', main = 'Change in Odds Ratio based on Incentives')
+lines(xs, incent_vec, col = 'darkblue')
+abline(h = 1, col ='darkgrey', lty = 'dashed')
+xtick<-c(0, 1, 2, 3)
+axis(side=1, at=xtick, labels = FALSE)
+text(x=xtick,  par("usr")[  3], 
+     labels = xtick, pos = 1, xpd = TRUE, offset = 0.7)
+
+#================Usage Bins Behavior=============================
+usage <- function(x) exp(.5413*x)
+usage_vec <- vector()
+xs <- seq(0, 2, 1)
+for (i in 1:3){
+  usage_vec[i] <- usage(i - 1)
+}
+
+plot(xs, usage_vec, pch = 19, ylim = c(0, 3.5), xaxt = 'n', xlab = '', cex = 1.8, col = 'darkblue', ylab = 'Odds Ratio', main = 'Change in Odds Ratio based on Usage Bins')
+lines(xs, usage_vec, col = 'darkblue')
+abline(h = 1, col ='darkgrey', lty = 'dashed')
+xtick<-c(0, 1, 2)
+axis(side=1, at=xtick, labels = FALSE)
+text(x=xtick,  par("usr")[3], 
+     labels = xtick, pos = 1, xpd = TRUE, offset = 0.7)
+
+#=======UTMY Behavior
+
+curve(exp(-0.0000461*x), 0, 15033, ylim = c(0,2), ylab = 'Odds Ratio', xlab = 'North-South Gradient', main = 'Odds Ratio Change Along Geography')
+abline(h = 1, col = 'darkgray', lty = 'dashed')
+
