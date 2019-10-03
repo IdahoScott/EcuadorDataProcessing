@@ -5,7 +5,7 @@
 library(mctest)
 library(glmmLasso)
 
-setwd('C:/Users/Carly Scott/Documents/Ecuador Social Science/')
+setwd('/Users/carlyscott/Documents/EcuadorDataProcessing/')
 EnglishWorkingFile <- read.csv("EnglishWorkingFile.csv", header = T, na.strings='999')
 EnglishWorkingFile$TotalStreamQual <- (EnglishWorkingFile$StreamColor + EnglishWorkingFile$StreamOdor + EnglishWorkingFile$StreamQuality)/3
 EnglishWorkingFile$UsageAmount <- EnglishWorkingFile$DrinkCook + EnglishWorkingFile$Irrigation + EnglishWorkingFile$CattleTroughs + EnglishWorkingFile$PersonalHygene + EnglishWorkingFile$WashClothes + EnglishWorkingFile$Recreation + EnglishWorkingFile$RiverSports + EnglishWorkingFile$PureAir + EnglishWorkingFile$NaturalRelaxxation
@@ -497,6 +497,7 @@ legend_cols <- c('aquamarine4', 'blue', 'slateblue2', 'orchid3', 'turquoise2', '
 par(mar=c(5.1, 4.1, 4.1, 9.1),xpd=TRUE)
 plot(binary_vars_sub$OddsRatio, xaxt = 'n', ylim = c(0,2), pch = 19, cex = 1.8, col = legend_cols, ylab = 'Odds Ratio', xlab = '', main = 'Change in Odds Ratio based on Presence of Variable')
 lines(c(0.75, 9.25), c(1, 1), col = 'darkgrey', lty = 'dashed')
+
 for (i in 1:9){
   lines(c(i, i), c(1, binary_vars_sub$OddsRatio[i]), lwd = 2, col = legend_cols[i])
 }
@@ -596,6 +597,7 @@ for (i in 1:4){
   incent_vec[i] <- incents(i - 1)
 }
 
+dev.off()
 plot(xs, incent_vec, pch = 19, ylim = c(0, 2), xaxt = 'n', xlab = '', cex = 1.8, col = 'darkblue', ylab = 'Odds Ratio', main = 'Change in Odds Ratio based on Incentives')
 lines(xs, incent_vec, col = 'darkblue')
 abline(h = 1, col ='darkgrey', lty = 'dashed')
