@@ -436,8 +436,8 @@ for (i in 1:392){
   if (water_qual_perc$UsageAmount[i] == 1 | water_qual_perc$UsageAmount[i] ==2 | water_qual_perc$UsageAmount[i] == 3){
     water_qual_perc$UsageBins[i] <- 1
   }
-  if (water_qual_perc$UsageAmount[i] ==3 | water_qual_perc$UsageAmount[i] ==4 | water_qual_perc$UsageAmount[i] ==5 | water_qual_perc$UsageAmount[i] ==6 | water_qual_perc$UsageAmount[i] ==7 | water_qual_perc$UsageAmount[i] ==8| water_qual_perc$UsageAmount[i] ==9)
-  {
+  if (water_qual_perc$UsageAmount[i] ==4 | water_qual_perc$UsageAmount[i] ==5 | water_qual_perc$UsageAmount[i] ==6 | water_qual_perc$UsageAmount[i] ==7 | water_qual_perc$UsageAmount[i] ==8| water_qual_perc$UsageAmount[i] ==9)
+  { #Found a mistake
      water_qual_perc$UsageBins[i] <- 2
   }
 }
@@ -480,7 +480,7 @@ coeffs$ABS_VAL <- abs(coeffs$V1)
 sorted_coeffs <- coeffs[order(-coeffs$ABS_VAL),] #55 variables from survey
 colnames(sorted_coeffs) <- c("LASSO LogOdds Coeff", "|LASSO Coeff|")
 sorted_coeffs 
-write.csv(sorted_coeffs, 'Coeffs_fixed_usage.csv')
+write.csv(sorted_coeffs, 'Coeffs_fixed_usage_ResolveError.csv')
 
 #Of course it changes the probabilitites and relative importance of variables
 
@@ -506,20 +506,20 @@ legend(9.3, 2, c('Drinking/Cooking', 'Pure Air', 'Washing Clothes', 'Irrigation'
 
 #========= Desires to Improve ================
 #ImpPublicSanitation
-imp_pubsan <- function(x) exp(-.06819*x -0.065212*x^2)
+imp_pubsan <- function(x) exp(-.07*x -0.0647*x^2)
 
 #ImpTrash
-imp_trash <- function(x) exp(-0.054631*x)
+imp_trash <- function(x) exp(-0.05413*x)
 
 #ImpPublicTran
-imp_tran <- function(x) exp(-0.03845*x)
+imp_tran <- function(x) exp(-0.038*x)
 
 #ImpElectricity
 
-imp_electric <- function(x) exp(-0.03633*x^2)
+imp_electric <- function(x) exp(-0.03598*x^2)
 
 #ImpRoads
-imp_roads <- function(x) exp(-0.024662*x^2 - 0.01906*x)
+imp_roads <- function(x) exp(-0.0243*x^2 - 0.019*x)
 
 #lets grab colors from piratepal (cause it's fun)
 library(yarrr) #create a function before pushing the final code
@@ -552,13 +552,13 @@ legend(4.15,1.5, c('Public Sanitation', 'Trash Collection', 'Electricity', 'Road
 
 #============Environmental and water concerns ===========
 #Deforestation
-def <- function(x) exp(.55465*x -(.3376*x^2))
+def <- function(x) exp(.55109*x -(.3349*x^2))
 
 #Dust
-dust <- function(x) exp(-.1899*x^2 + 0.012912*x^3) 
+dust <- function(x) exp(-.1878*x^2 + 0.0128*x^3) 
 
 #ProAirContam
-aircontam <- function(x) exp(0.024646*x^2 - (.022338*x^3))
+aircontam <- function(x) exp(0.0244*x^2 - (.02216*x^3))
 
 #Pick distinctive palettes
 library(palettetown)
@@ -590,7 +590,7 @@ text(x=xtick,  par("usr")[3],
 legend(3,2, c('Deforestation', 'Dust', 'Air \n Contamination'), bty = 'n', col = color, pch = 19, lty = 1, pt.cex = 1, cex = 0.8)
 
 #================Incentives Behavior====================
-incents <- function(x) exp(-0.4467*x^2)
+incents <- function(x) exp(-0.4437*x^2)
 incent_vec <- vector()
 xs <- seq(0, 3, 1)
 for (i in 1:4){
@@ -607,7 +607,7 @@ text(x=xtick,  par("usr")[  3],
      labels = xtick, pos = 1, xpd = TRUE, offset = 0.7)
 
 #================Usage Bins Behavior=============================
-usage <- function(x) exp(.5413*x)
+usage <- function(x) exp(.6144*x)
 usage_vec <- vector()
 xs <- seq(0, 2, 1)
 for (i in 1:3){
@@ -624,6 +624,6 @@ text(x=xtick,  par("usr")[3],
 
 #=======UTMY Behavior
 
-curve(exp(-0.0000461*x), 0, 15033, ylim = c(0,2), ylab = 'Odds Ratio', xlab = 'North-South Gradient', main = 'Odds Ratio Change Along Geography')
+curve(exp(-0.0000456 *x), 0, 15033, ylim = c(0,2), ylab = 'Odds Ratio', xlab = 'North-South Gradient', main = 'Odds Ratio Change Along Geography')
 abline(h = 1, col = 'darkgray', lty = 'dashed')
 
