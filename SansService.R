@@ -188,6 +188,7 @@ write.csv(sorted_coeffs, "SansServicesModel.csv")
 
 #==============Spearman's Rho==============================================
 #Use Spearman's Rho to check for correlation
+library(pspearman)
 
 rho_mat <- matrix(NA, nrow = 66, ncol = 66)
 for (i in 1:length(water_qual_perc)){
@@ -494,14 +495,14 @@ binary_vars_sub <- binary_vars_sub[order(-binary_vars_sub$dist),]
 
 #legend_cols <- c('darkblue', 'darkolivegreen4', 'darkorchid3', 'firebrick', 'goldenrod', 'maroon1', 'black')
 legend_cols <- c('aquamarine4', 'blue', 'slateblue2', 'orchid3', 'turquoise2', 'navyblue', 'seagreen2', 'darkgoldenrod2', 'brown')
-par(mar=c(5.1, 4.1, 4.1, 9.1),xpd=TRUE)
-plot(binary_vars_sub$OddsRatio, xaxt = 'n', ylim = c(0,2), pch = 19, cex = 1.8, col = legend_cols, ylab = 'Odds Ratio', xlab = '', main = 'Change in Odds Ratio based on Presence of Variable')
+par(mar=c(5.1, 4.1, 4.1, 10.1),xpd=TRUE)
+plot(binary_vars_sub$OddsRatio, xaxt = 'n', ylim = c(0,2), pch = 19, cex = 1.8, col = legend_cols, main  = 'Relative odds ratios of above average WQP \nfor binary model variables', ylab = 'Relative odds ratio', xlab = '')
 lines(c(0.75, 9.25), c(1, 1), col = 'darkgrey', lty = 'dashed')
 
 for (i in 1:9){
   lines(c(i, i), c(1, binary_vars_sub$OddsRatio[i]), lwd = 2, col = legend_cols[i])
 }
-text(2, 0.9, '1:1 Odds Ratio', cex = 0.8, col ='gray42')
+#text(2, 0.9, '1:1 Odds Ratio', cex = 0.8, col ='gray42')
 legend(9.3, 2, c('Drinking/Cooking', 'Pure Air', 'Washing Clothes', 'Irrigation', 'River Sports', 'Cattle Troughs', 'Natural Relaxation',' Urban Com.','Pastoral Com.'), bty = 'n', col = legend_cols, pch = 19, lty = 1)
 
 #========= Desires to Improve ================
@@ -538,7 +539,7 @@ discrete_vars <- discrete_vars[
   ]
 discrete_vars$x <- xs
 par(mar=c(5.1, 4.1, 4.1, 9.1),xpd=TRUE)
-plot(discrete_vars$x, discrete_vars$odds, pch = 19, cex = 1.6, ylim = c(0,1.5), col = as.character(discrete_vars$color), xaxt = 'n', ylab = 'Odds Ratio', xlab = 'Degree of Desire', main = 'Change in Odds Ratio Based on Desire to Improve Services')
+plot(discrete_vars$x, discrete_vars$odds, pch = 19, cex = 1.6, ylim = c(0,1.5), col = as.character(discrete_vars$color), xaxt = 'n', ylab = 'Relative odds ratio', xlab = 'Degree of Desire', main = 'Relative odds ratio of above average WQP \nbased on desire to improve public services')
 lines(c(0.1, 4.15), c(1, 1), col = 'darkgrey', lty = 'dashed')
 for (i in 1:15){
   lines(c(discrete_vars$x[i], discrete_vars$x[i]), c(1, discrete_vars$odds[i]), lwd = 2, col = as.character(discrete_vars$color[i]))
@@ -577,7 +578,7 @@ discrete_vars <- discrete_vars[
 discrete_vars$x <- xs
 
 par(mar=c(5.1, 4.1, 4.1, 9.1),xpd=TRUE)
-plot(discrete_vars$x, discrete_vars$odds, pch = 19, cex = 1.6, ylim = c(0,2), col = as.character(discrete_vars$color), xaxt = 'n', ylab = 'Odds Ratio', xlab = '', main = 'Change in Odds Ratio based on Degree of Concern')
+plot(discrete_vars$x, discrete_vars$odds, pch = 19, cex = 1.6, ylim = c(0,2), col = as.character(discrete_vars$color), xaxt = 'n', ylab = 'Relative odds ratio', xlab = 'Degree of concern', main = 'Relative odds ratio of above average WQP \nbased on degree of environmental concerns')
 #gap.plot(discrete_vars$x, discrete_vars$odds, gap = c(3.5, 14), ytics = c(seq(0, 3.5, .5), seq(14, 15.5, 0.5)), pch = 19, cex = 1.6, col = as.character(discrete_vars$color), xaxt = 'n', ylab = 'Odds Ratio', xlab = '', main = 'Change in Odds Ratio based on Degree of Concern')
 lines(c(0.15, 2.85), c(1, 1), col = 'darkgrey', lty = 'dashed')
 for (i in 1:9){
